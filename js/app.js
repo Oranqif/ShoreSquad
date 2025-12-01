@@ -296,12 +296,12 @@ const WeatherModule = {
 
     generateSampleWeather() {
         return {
-            temp: 72,
+            temp: 28,
             description: 'Partly Cloudy',
             icon: '⛅',
-            humidity: 65,
-            windSpeed: 12,
-            uvIndex: 6,
+            humidity: 75,
+            windSpeed: 15,
+            uvIndex: 7,
             conditions: 'Perfect for beach cleanup!'
         };
     },
@@ -312,7 +312,7 @@ const WeatherModule = {
                 <div class="weather-main">
                     <div class="weather-icon">${data.icon}</div>
                     <div>
-                        <div class="weather-temp">${data.temp}°F</div>
+                        <div class="weather-temp">${data.temp}°C</div>
                         <div class="weather-description">${data.description}</div>
                     </div>
                 </div>
@@ -324,7 +324,7 @@ const WeatherModule = {
                 </div>
                 <div class="weather-detail">
                     <div class="weather-detail-label">Wind Speed</div>
-                    <div class="weather-detail-value">${data.windSpeed} mph</div>
+                    <div class="weather-detail-value">${data.windSpeed} km/h</div>
                 </div>
                 <div class="weather-detail">
                     <div class="weather-detail-label">UV Index</div>
