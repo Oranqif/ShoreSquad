@@ -15,8 +15,12 @@ const CONFIG = {
         MIN_ZOOM: 3
     },
     WEATHER: {
-        API_KEY: 'demo', // Replace with actual API key
-        BASE_URL: 'https://api.openweathermap.org/data/2.5'
+        // NEA Singapore data.gov.sg APIs
+        FORECAST_URL: 'https://api.data.gov.sg/v1/environment/4-day-weather-forecast',
+        READINGS_URL: 'https://api.data.gov.sg/v1/environment/2-hour-weather-forecast',
+        TEMP_URL: 'https://api.data.gov.sg/v1/environment/air-temperature',
+        HUMIDITY_URL: 'https://api.data.gov.sg/v1/environment/relative-humidity',
+        WIND_URL: 'https://api.data.gov.sg/v1/environment/wind-speed'
     },
     ANIMATION: {
         DURATION: 2000,
@@ -277,64 +281,202 @@ const WeatherModule = {
         if (!DOM.weatherWidget) return;
 
         try {
-            // Use user location or default
-            const location = AppState.userLocation || {
-                lat: CONFIG.MAP.DEFAULT_CENTER[0],
-                lng: CONFIG.MAP.DEFAULT_CENTER[1]
-            };
+            // Fetch real weather data from NEA
+            const [forecastData, currentData] = await Promise.all([
+                this.fetchForecast(),
+                this.fetchCurrentWeather()
+            ]);
 
-            // For demo purposes, create sample weather data
-            // In production, you'd fetch from actual weather API
-            const weatherData = this.generateSampleWeather();
-            this.displayWeather(weatherData);
+            this.displayWeather(forecastData, currentData);
 
         } catch (error) {
             console.error('Weather fetch error:', error);
-            Utils.showNotification('Failed to load weather data', 'error');
+            Utils.showNotification('Using sample weather data', 'error');
+            // Fallback to sample data if API fails
+            this.displayFallbackWeather();
         }
     },
 
-    generateSampleWeather() {
-        return {
-            temp: 28,
-            description: 'Partly Cloudy',
-            icon: '⛅',
-            humidity: 75,
-            windSpeed: 15,
-            uvIndex: 7,
-            conditions: 'Perfect for beach cleanup!'
-        };
+    async fetchForecast() {
+        try {
+            const response = await fetch(CONFIG.WEATHER.FORECAST_URL);
+            if (!response.ok) throw new Error('Forecast API error');
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error('Forecast fetch error:', error);
+            throw error;
+        }
     },
 
-    displayWeather(data) {
-        DOM.weatherWidget.innerHTML = `
+    async fetchCurrentWeather() {
+        try {
+            const [tempRes, humidityRes, windRes] = await Promise.all([
+                fetch(CONFIG.WEATHER.TEMP_URL),
+                fetch(CONFIG.WEATHER.HUMIDITY_URL),
+                fetch(CONFIG.WEATHER.WIND_URL)
+            ]);
+
+            const [tempData, humidityData, windData] = await Promise.all([
+                tempRes.json(),
+                humidityRes.json(),
+                windRes.json()
+            ]);
+
+            return {
+                temperature: this.getEastAverage(tempData),
+                humidity: this.getEastAverage(humidityData),
+                windSpeed: this.getEastAverage(windData)
+            };
+        } catch (error) {
+            console.error('Current weather fetch error:', error);
+            return null;
+        }
+    },
+
+    getEastAverage(data) {
+        // Get readings from East region stations (Pasir Ris, Changi, etc.)
+        if (!data.items || !data.items[0] || !data.items[0].readings) return null;
+        
+        const readings = data.items[0].readings;
+        const eastStations = ['Pasir Ris', 'Changi', 'East Coast Parkway'];
+        
+        const relevantReadings = readings.filter(r => 
+            eastStations.some(station => r.station_id?.includes(station.toLowerCase().replace(/\s+/g, '_')))
+        );
+
+        if (relevantReadings.length === 0) {
+            // If no east stations, use all readings
+            const values = readings.map(r => r.value).filter(v => v != null);
+            return values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
+        }
+
+        const values = relevantReadings.map(r => r.value).filter(v => v != null);
+        return values.length > 0 ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : null;
+    },
+
+    getWeatherIcon(forecast) {
+        const description = forecast.toLowerCase();
+        if (description.includes('thunder')) return '⛈️';
+        if (description.includes('rain') || description.includes('showers')) return '🌧️';
+        if (description.includes('cloudy')) return '☁️';
+        if (description.includes('partly')) return '⛅';
+        if (description.includes('fair') || description.includes('sunny')) return '☀️';
+        return '🌤️';
+    },
+
+    getCleanupConditions(forecast, temp) {
+        const description = forecast.toLowerCase();
+        if (description.includes('thunder') || description.includes('heavy rain')) {
+            return { text: 'Not ideal - storms expected', color: '#FF6B6B' };
+        }
+        if (description.includes('rain') || description.includes('showers')) {
+            return { text: 'Fair - light rain possible', color: '#FFA500' };
+        }
+        if (temp && temp > 32) {
+            return { text: 'Good - stay hydrated!', color: '#4ECDC4' };
+        }
+        return { text: 'Perfect for beach cleanup!', color: '#4ECDC4' };
+    },
+
+    displayWeather(forecastData, currentData) {
+        if (!forecastData || !forecastData.items || !forecastData.items[0]) {
+            this.displayFallbackWeather();
+            return;
+        }
+
+        const forecasts = forecastData.items[0].forecasts;
+        const today = forecasts[0];
+        const conditions = this.getCleanupConditions(
+            today.forecast,
+            currentData?.temperature
+        );
+
+        // Build current weather section
+        let currentHTML = `
             <div class="weather-current">
                 <div class="weather-main">
-                    <div class="weather-icon">${data.icon}</div>
+                    <div class="weather-icon" style="font-size: 5rem;">${this.getWeatherIcon(today.forecast)}</div>
                     <div>
-                        <div class="weather-temp">${data.temp}°C</div>
-                        <div class="weather-description">${data.description}</div>
+                        <div class="weather-temp">${currentData?.temperature || today.temperature.high}°C</div>
+                        <div class="weather-description">${today.forecast}</div>
+                    </div>
+                </div>
+                <div class="weather-today-details">
+                    <div class="weather-detail-inline">
+                        <span>💧 ${currentData?.humidity || 75}%</span>
+                        <span>💨 ${currentData?.windSpeed || 15} km/h</span>
+                        <span>🌡️ ${today.temperature.low}°C - ${today.temperature.high}°C</span>
                     </div>
                 </div>
             </div>
-            <div class="weather-details">
-                <div class="weather-detail">
-                    <div class="weather-detail-label">Humidity</div>
-                    <div class="weather-detail-value">${data.humidity}%</div>
+            <div class="weather-detail" style="grid-column: 1 / -1; background: ${conditions.color}; color: white; padding: 1rem; border-radius: 0.5rem; text-align: center; margin: 1rem 0;">
+                <div class="weather-detail-label" style="color: white; opacity: 1;">Cleanup Conditions</div>
+                <div class="weather-detail-value" style="color: white; font-weight: 600;">${conditions.text}</div>
+            </div>
+        `;
+
+        // Build 4-day forecast section
+        let forecastHTML = `
+            <div class="forecast-section">
+                <h3 style="margin-bottom: 1rem; color: var(--charcoal);">4-Day Forecast</h3>
+                <div class="forecast-grid">
+        `;
+
+        forecasts.forEach(day => {
+            const date = new Date(day.date);
+            const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+            const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            const icon = this.getWeatherIcon(day.forecast);
+
+            forecastHTML += `
+                <div class="forecast-card">
+                    <div class="forecast-day">${dayName}</div>
+                    <div class="forecast-date">${dateStr}</div>
+                    <div class="forecast-icon">${icon}</div>
+                    <div class="forecast-temps">
+                        <span class="temp-high">${day.temperature.high}°</span>
+                        <span class="temp-low">${day.temperature.low}°</span>
+                    </div>
+                    <div class="forecast-condition">${day.forecast}</div>
                 </div>
-                <div class="weather-detail">
-                    <div class="weather-detail-label">Wind Speed</div>
-                    <div class="weather-detail-value">${data.windSpeed} km/h</div>
-                </div>
-                <div class="weather-detail">
-                    <div class="weather-detail-label">UV Index</div>
-                    <div class="weather-detail-value">${data.uvIndex}</div>
-                </div>
-                <div class="weather-detail" style="grid-column: 1 / -1; background: #4ECDC4; color: white;">
-                    <div class="weather-detail-label">Cleanup Conditions</div>
-                    <div class="weather-detail-value">${data.conditions}</div>
+            `;
+        });
+
+        forecastHTML += `
                 </div>
             </div>
+        `;
+
+        DOM.weatherWidget.innerHTML = currentHTML + forecastHTML;
+    },
+
+    displayFallbackWeather() {
+        const conditions = { text: 'Perfect for beach cleanup!', color: '#4ECDC4' };
+        DOM.weatherWidget.innerHTML = `
+            <div class="weather-current">
+                <div class="weather-main">
+                    <div class="weather-icon" style="font-size: 5rem;">⛅</div>
+                    <div>
+                        <div class="weather-temp">28°C</div>
+                        <div class="weather-description">Partly Cloudy</div>
+                    </div>
+                </div>
+                <div class="weather-today-details">
+                    <div class="weather-detail-inline">
+                        <span>💧 75%</span>
+                        <span>💨 15 km/h</span>
+                        <span>🌡️ 26°C - 32°C</span>
+                    </div>
+                </div>
+            </div>
+            <div class="weather-detail" style="grid-column: 1 / -1; background: ${conditions.color}; color: white; padding: 1rem; border-radius: 0.5rem; text-align: center; margin: 1rem 0;">
+                <div class="weather-detail-label" style="color: white; opacity: 1;">Cleanup Conditions</div>
+                <div class="weather-detail-value" style="color: white; font-weight: 600;">${conditions.text}</div>
+            </div>
+            <p style="text-align: center; color: var(--gray); font-size: 0.9rem; margin-top: 1rem;">
+                <em>Sample data - API unavailable</em>
+            </p>
         `;
     }
 };
