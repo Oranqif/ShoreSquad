@@ -206,40 +206,9 @@ const MapModule = {
         if (!DOM.mapContainer) return;
 
         try {
-            // Initialize Leaflet map
-            AppState.map = L.map('mapContainer').setView(
-                CONFIG.MAP.DEFAULT_CENTER,
-                CONFIG.MAP.DEFAULT_ZOOM
-            );
-
-            // Add tile layer
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: CONFIG.MAP.MAX_ZOOM,
-                minZoom: CONFIG.MAP.MIN_ZOOM
-            }).addTo(AppState.map);
-
-            // Try to get user location
-            try {
-                const userLoc = await Utils.getUserLocation();
-                AppState.userLocation = userLoc;
-                AppState.map.setView([userLoc.lat, userLoc.lng], 12);
-                
-                // Add user marker
-                L.marker([userLoc.lat, userLoc.lng])
-                    .addTo(AppState.map)
-                    .bindPopup('📍 You are here!')
-                    .openPopup();
-            } catch (error) {
-                console.log('Using default location');
-            }
-
-            // Add sample event markers
-            this.addSampleEvents();
-
-            // Remove loading indicator
-            const loading = DOM.mapContainer.querySelector('.map-loading');
-            if (loading) loading.remove();
+            // Google Maps iframe is embedded, no initialization needed
+            // Just load the sample events for the events list
+            this.loadSampleEvents();
 
         } catch (error) {
             console.error('Map initialization error:', error);
@@ -247,46 +216,32 @@ const MapModule = {
         }
     },
 
-    addSampleEvents() {
+    loadSampleEvents() {
         const sampleEvents = [
             {
-                name: 'Santa Monica Beach Cleanup',
-                lat: 34.0195,
-                lng: -118.4912,
+                name: 'Pasir Ris Beach Cleanup',
+                lat: 1.381497,
+                lng: 103.955574,
                 date: '2025-12-07',
                 participants: 25
             },
             {
-                name: 'Venice Beach Squad',
-                lat: 33.9850,
-                lng: -118.4695,
+                name: 'East Coast Park Squad',
+                lat: 1.3008,
+                lng: 103.9282,
                 date: '2025-12-08',
                 participants: 18
             },
             {
-                name: 'Malibu Coastal Cleanup',
-                lat: 34.0259,
-                lng: -118.7798,
+                name: 'Sentosa Beach Cleanup',
+                lat: 1.2494,
+                lng: 103.8303,
                 date: '2025-12-10',
                 participants: 32
             }
         ];
 
-        sampleEvents.forEach(event => {
-            const marker = L.marker([event.lat, event.lng])
-                .addTo(AppState.map)
-                .bindPopup(`
-                    <div style="text-align: center;">
-                        <strong>${event.name}</strong><br>
-                        📅 ${new Date(event.date).toLocaleDateString()}<br>
-                        👥 ${event.participants} joined
-                    </div>
-                `);
-
-            AppState.markers.push(marker);
-            AppState.events.push(event);
-        });
-
+        AppState.events = sampleEvents;
         this.displayEvents();
     },
 

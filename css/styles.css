@@ -429,6 +429,11 @@ section {
     position: relative;
 }
 
+.map-container iframe {
+    display: block;
+    pointer-events: auto;
+}
+
 .map-loading,
 .weather-loading {
     display: flex;
