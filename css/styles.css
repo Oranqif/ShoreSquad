@@ -334,9 +334,11 @@ button {
 .hero-stats {
     display: flex;
     justify-content: center;
-    gap: var(--spacing-lg);
+    gap: var(--spacing-xl);
     flex-wrap: wrap;
     animation: fadeInUp 0.8s ease 0.6s both;
+    padding: var(--spacing-md) 0;
+    margin-top: var(--spacing-md);
 }
 
 .stat-item {
